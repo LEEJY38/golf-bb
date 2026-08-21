@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="zh-Hans">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Golf BB · Team Jahat vs Team Baik 实时成绩" />
+    <meta name="description" content="Golf BB · Team Jahat vs Team Baik live golf score" />
     <meta property="og:title" content="Golf BB · Live Score" />
-    <meta property="og:description" content="8 人高尔夫友谊赛实时成绩与分组" />
+    <meta property="og:description" content="Live scores, player flights, and match settings for an 8-player golf event" />
     <meta property="og:image" content="https://leejy38.github.io/golf-bb/event-cover.jpeg" />
     <title>Golf BB · Live Score</title>
     <link rel="stylesheet" href="styles.css" />
@@ -14,101 +14,56 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#top" aria-label="Golf BB 首页">
-          <span class="brand-mark">BB</span>
-          <span><strong>GOLF BB</strong><small>FRIENDLY CUP</small></span>
-        </a>
-        <div class="header-actions">
-          <button class="icon-button" id="share-button" aria-label="分享成绩">↗</button>
-          <button class="login-button" id="login-button">登录计分</button>
-        </div>
+        <a class="brand" href="#top" aria-label="Golf BB home"><span class="brand-mark">BB</span><span><strong>GOLF BB</strong><small>FRIENDLY CUP</small></span></a>
+        <div class="header-actions"><button class="icon-button" id="share-button" aria-label="Share live score">↗</button><button class="login-button" id="login-button">Scorer Sign In</button></div>
       </header>
 
       <div class="content" id="top">
         <section class="event-heading">
-          <img class="event-photo" src="event-cover.jpeg" alt="Golf BB 比赛主视觉" />
+          <img class="event-photo" src="event-cover.jpeg" alt="Golf BB tournament group" />
           <div class="event-overlay"></div>
-          <div class="event-copy">
-            <p class="eyebrow"><span class="live-dot"></span> LIVE · <span id="current-status">比赛尚未开始</span></p>
-            <h1>Team Jahat <span>vs</span> Team Baik</h1>
-            <p class="event-meta">21 Aug 2026 · Horizon Hills Golf Club</p>
-          </div>
-          <div class="permission-pill" id="permission-pill">
-            <span>◉</span><div><small>当前权限</small><strong id="permission-label">访客 · 只读</strong></div>
-          </div>
+          <div class="event-copy"><p class="eyebrow"><span class="live-dot"></span> LIVE · <span id="current-status">MATCH NOT STARTED</span></p><h1>Team Jahat <span>vs</span> Team Baik</h1><p class="event-meta">21 Aug 2026 · Horizon Hills Golf Club</p></div>
+          <div class="permission-pill" id="permission-pill"><span>◉</span><div><small>CURRENT ACCESS</small><strong id="permission-label">GUEST · VIEW ONLY</strong></div></div>
         </section>
 
-        <section class="score-hero" aria-label="队伍总分">
-          <article class="team-summary team-a" id="team-a-card">
-            <div class="team-label"><span>J</span><div><small>TEAM</small><strong>JAHAT</strong></div></div>
-            <p class="big-score" id="team-a-score">0</p><span class="team-status" id="team-a-status">平手</span>
-          </article>
+        <section class="score-hero" aria-label="Team totals">
+          <article class="team-summary team-a" id="team-a-card"><div class="team-label"><span>J</span><div><small>TEAM</small><strong>JAHAT</strong></div></div><p class="big-score" id="team-a-score">0</p><span class="team-status" id="team-a-status">TIED</span></article>
           <div class="versus"><span>VS</span><i></i></div>
-          <article class="team-summary team-b" id="team-b-card">
-            <div class="team-label"><span>B</span><div><small>TEAM</small><strong>BAIK</strong></div></div>
-            <p class="big-score" id="team-b-score">0</p><span class="team-status" id="team-b-status">平手</span>
-          </article>
+          <article class="team-summary team-b" id="team-b-card"><div class="team-label"><span>B</span><div><small>TEAM</small><strong>BAIK</strong></div></div><p class="big-score" id="team-b-score">0</p><span class="team-status" id="team-b-status">TIED</span></article>
         </section>
 
         <section class="scoreboard" id="scoreboard">
-          <div class="section-head">
-            <div><p class="section-kicker">LIVE SCORECARD</p><h2>实时成绩</h2></div>
-            <div class="section-actions"><button class="par-settings-button hidden" id="par-button">设置球场 PAR</button><p>自动更新 <span>●</span></p></div>
-          </div>
+          <div class="section-head"><div><p class="section-kicker">LIVE SCORECARD</p><h2>Live Score</h2></div><div class="section-actions"><p>AUTO REFRESH <span>●</span></p><button class="par-settings-button hidden" id="par-button">Course PAR</button><button class="par-settings-button hidden" id="match-button">Match Settings</button></div></div>
           <div class="toolbar">
-            <div class="segmented" aria-label="选择组别">
-              <button class="active" data-flight="1">第 1 组</button><button data-flight="2">第 2 组</button>
-            </div>
-            <div class="segmented light" aria-label="选择九洞">
-              <button class="active" data-nine="front">前 9 洞</button><button data-nine="back">后 9 洞</button>
-            </div>
+            <div class="segmented" aria-label="Select flight"><button class="active" data-flight="1">Flight 1</button><button data-flight="2">Flight 2</button></div>
+            <div class="segmented light" aria-label="Select nine holes"><button class="active" data-nine="front">Front 9</button><button data-nine="back">Back 9</button></div>
           </div>
-          <div class="flight-note"><span>⛳</span><p><strong id="flight-title">第 1 组 · Tee 08:10</strong><small>Team Jahat 2 人 · Team Baik 2 人</small></p></div>
+          <div class="flight-note"><span>⛳</span><p><strong id="flight-title">Flight 1 · Tee 08:10</strong><small>2 Team Jahat · 2 Team Baik</small></p></div>
           <div class="score-scroll"><div class="score-grid" id="score-grid" style="--hole-count:9"></div></div>
-          <div class="score-legend"><span><i class="birdie"></i>低于标准杆</span><span><i class="bogey"></i>高于标准杆</span><span>← 左右滑动查看 →</span></div>
+          <div class="score-legend"><span><i class="birdie"></i>UNDER PAR</span><span><i class="bogey"></i>OVER PAR</span><span>← SWIPE TO VIEW →</span></div>
         </section>
 
         <section class="groups-section" id="groups">
-          <div class="section-head"><div><p class="section-kicker">8 PLAYERS</p><h2>球员分组</h2></div></div>
+          <div class="section-head"><div><p class="section-kicker">8 PLAYERS</p><h2>Player Flights</h2></div></div>
           <div class="group-cards">
-            <article class="group-card"><div class="group-title"><span>01</span><div><small>FLIGHT</small><strong>第 1 组</strong></div><em>08:10</em></div><div class="group-roster" id="group-1"></div></article>
-            <article class="group-card"><div class="group-title"><span>02</span><div><small>FLIGHT</small><strong>第 2 组</strong></div><em>08:20</em></div><div class="group-roster" id="group-2"></div></article>
+            <article class="group-card"><div class="group-title"><span>01</span><div><small>FLIGHT</small><strong>Flight 1</strong></div><em>08:10</em></div><div class="group-roster" id="group-1"></div></article>
+            <article class="group-card"><div class="group-title"><span>02</span><div><small>FLIGHT</small><strong>Flight 2</strong></div><em>08:20</em></div><div class="group-roster" id="group-2"></div></article>
           </div>
         </section>
 
-        <section class="rules-card" id="rules"><div class="rules-icon">⚑</div><div><p class="section-kicker">FORMAT</p><h2>比赛规则</h2><p>18 洞总杆赛。各球员独立记分，4 位成员成绩相加为队伍总杆；总杆较低的队伍胜出。</p></div></section>
+        <section class="rules-card" id="rules"><div class="rules-icon">⚑</div><div><p class="section-kicker">FORMAT</p><h2>Match Rules</h2><p>18-hole stroke play. Each player records an individual score. The four player totals are combined for each team, and the team with the lower total wins.</p></div></section>
         <footer><div class="brand footer-brand"><span class="brand-mark">BB</span><span><strong>GOLF BB</strong><small>PLAY TOGETHER</small></span></div><p>Fair play. Good company. Great golf.</p></footer>
       </div>
 
-      <nav class="bottom-nav" aria-label="主要导航"><a class="active" href="#scoreboard"><span>●</span>实时成绩</a><a href="#groups"><span>♙</span>球员分组</a><a href="#rules"><span>⚑</span>比赛规则</a></nav>
+      <nav class="bottom-nav" aria-label="Main navigation"><a class="active" href="#scoreboard"><span>●</span>LIVE SCORE</a><a href="#groups"><span>♙</span>FLIGHTS</a><a href="#rules"><span>⚑</span>RULES</a></nav>
 
-      <div class="modal-backdrop hidden" id="auth-backdrop" role="presentation">
-        <div class="auth-modal" role="dialog" aria-modal="true" aria-label="计分员登录">
-          <button class="modal-close" data-close="auth" aria-label="关闭">×</button><div class="modal-emblem">BB</div>
-          <p class="section-kicker">SCORER ACCESS</p><h2>计分员登录</h2>
-          <p class="modal-copy">访客无需登录即可看 Live Score。两个固定账号分别负责第 1 组和第 2 组成绩。</p>
-          <form id="login-form"><label>计分员 ID<input required name="scorerId" placeholder="flight1 或 flight2" autocomplete="username" /></label><label>密码<input required name="password" type="password" placeholder="输入密码" autocomplete="current-password" /></label><button class="primary-button" type="submit">登录计分 <span>→</span></button></form>
-          <small class="demo-hint">账号密码由比赛负责人保管</small>
-        </div>
-      </div>
+      <div class="modal-backdrop hidden" id="auth-backdrop" role="presentation"><div class="auth-modal" role="dialog" aria-modal="true" aria-label="Scorer sign in"><button class="modal-close" data-close="auth" aria-label="Close">×</button><div class="modal-emblem">BB</div><p class="section-kicker">SCORER ACCESS</p><h2>Scorer Sign In</h2><p class="modal-copy">Guests can view Live Score without signing in. Each scorer account can edit its assigned flight.</p><form id="login-form"><label>SCORER ID<input required name="scorerId" placeholder="flight1 or flight2" autocomplete="username" /></label><label>PASSWORD<input required name="password" type="password" placeholder="Enter password" autocomplete="current-password" /></label><button class="primary-button" type="submit">SIGN IN <span>→</span></button></form><small class="demo-hint">Scorer credentials are held by the match organizer.</small></div></div>
 
-      <div class="modal-backdrop hidden" id="par-backdrop" role="presentation">
-        <div class="auth-modal par-modal" role="dialog" aria-modal="true" aria-label="球场标准杆设置">
-          <button class="modal-close" data-close="par" aria-label="关闭">×</button><p class="section-kicker">COURSE SETUP</p><h2>18 洞 PAR 设置</h2>
-          <p class="modal-copy">按球场 Scorecard 调整每一洞的标准杆，保存后自动重新计算。</p>
-          <div class="par-totals" id="par-totals"></div><div class="par-grid" id="par-grid"></div>
-          <button class="primary-button" id="save-pars">保存球场 PAR <span>✓</span></button>
-        </div>
-      </div>
+      <div class="modal-backdrop hidden" id="par-backdrop" role="presentation"><div class="auth-modal par-modal" role="dialog" aria-modal="true" aria-label="Course PAR settings"><button class="modal-close" data-close="par" aria-label="Close">×</button><p class="section-kicker">COURSE SETUP</p><h2>18-Hole PAR Settings</h2><p class="modal-copy">Match the PAR for every hole to the course scorecard. Totals versus PAR will update automatically.</p><div class="par-totals" id="par-totals"></div><div class="par-grid" id="par-grid"></div><button class="primary-button" id="save-pars">SAVE COURSE PAR <span>✓</span></button></div></div>
 
-      <div class="modal-backdrop align-bottom hidden" id="score-backdrop" role="presentation">
-        <div class="score-editor" role="dialog" aria-modal="true" aria-label="修改成绩">
-          <div class="sheet-handle"></div><div class="editor-heading"><div class="player-cell" id="editor-player"></div><button data-close="score">×</button></div>
-          <div class="hole-label"><span id="editor-hole"></span><small id="editor-par"></small></div>
-          <div class="stepper"><button id="score-minus" aria-label="减一杆">−</button><strong id="draft-score">4</strong><button id="score-plus" aria-label="加一杆">＋</button></div>
-          <p class="score-description" id="score-description"></p><button class="primary-button" id="save-score">保存成绩 <span>✓</span></button>
-        </div>
-      </div>
+      <div class="modal-backdrop hidden" id="match-backdrop" role="presentation"><div class="auth-modal match-modal" role="dialog" aria-modal="true" aria-label="Match settings"><button class="modal-close" data-close="match" aria-label="Close">×</button><p class="section-kicker">8 PLAYER SETUP</p><h2>Match Settings</h2><p class="modal-copy">Edit names, teams, and flights. Each flight must contain two Team Jahat and two Team Baik players.</p><div class="match-summary" id="match-summary"></div><div class="player-settings-list" id="player-settings-list"></div><button class="primary-button" id="save-match">SAVE MATCH SETTINGS <span>✓</span></button></div></div>
+
+      <div class="modal-backdrop align-bottom hidden" id="score-backdrop" role="presentation"><div class="score-editor" role="dialog" aria-modal="true" aria-label="Edit score"><div class="sheet-handle"></div><div class="editor-heading"><div class="player-cell" id="editor-player"></div><button data-close="score" aria-label="Close">×</button></div><div class="hole-label"><span id="editor-hole"></span><small id="editor-par"></small></div><div class="stepper"><button id="score-minus" aria-label="Subtract one stroke">−</button><strong id="draft-score">4</strong><button id="score-plus" aria-label="Add one stroke">＋</button></div><p class="score-description" id="score-description"></p><button class="primary-button" id="save-score">SAVE SCORE <span>✓</span></button></div></div>
 
       <div class="toast hidden" id="toast" role="status"></div>
     </main>
