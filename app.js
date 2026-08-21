@@ -32,7 +32,8 @@ let draftPlayers = DEFAULT_PLAYER_DATA.map((player) => ({ ...player }));
 let flight = 1;
 let nine = "front";
 let scorer = null;
-let token = sessionStorage.getItem("golfbb_token") || "";
+const TOKEN_KEY = "golfbb_token";
+let token = localStorage.getItem(TOKEN_KEY) || "";
 let editing = null;
 let draftScore = null;
 let swapSourceId = null;
@@ -96,6 +97,12 @@ function headers(json = false) {
 async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...options });
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && path !== "/api/auth/login") {
+    token = "";
+    scorer = null;
+    localStorage.removeItem(TOKEN_KEY);
+    render();
+  }
   if (!response.ok) throw new Error(data.error || "Connection temporarily unavailable");
   return data;
 }
@@ -295,7 +302,7 @@ async function restoreSession() {
   } catch {
     token = "";
     scorer = null;
-    sessionStorage.removeItem("golfbb_token");
+    localStorage.removeItem(TOKEN_KEY);
   }
 }
 
@@ -321,7 +328,7 @@ byId("login-button").addEventListener("click", () => {
   if (!scorer) return openAuth();
   scorer = null;
   token = "";
-  sessionStorage.removeItem("golfbb_token");
+  localStorage.removeItem(TOKEN_KEY);
   render();
   showToast("Switched to guest view");
 });
@@ -356,7 +363,7 @@ byId("login-form").addEventListener("submit", async (event) => {
     const data = await api("/api/auth/login", { method: "POST", headers: headers(true), body: JSON.stringify({ id: String(form.get("scorerId") || "").trim().toLowerCase(), password: String(form.get("password") || "") }) });
     scorer = data.scorer;
     token = data.token;
-    sessionStorage.setItem("golfbb_token", token);
+    localStorage.setItem(TOKEN_KEY, token);
     flight = scorer.flight;
     event.currentTarget.reset();
     byId("auth-backdrop").classList.add("hidden");
