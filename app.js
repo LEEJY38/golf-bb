@@ -24,6 +24,7 @@ const DEFAULT_PLAYER_DATA = [
 ];
 
 const MATCH_CACHE_KEY = "golfbb_match";
+const LIVE_CACHE_KEY = "golfbb_live";
 
 function loadCachedMatch() {
   try {
@@ -33,11 +34,31 @@ function loadCachedMatch() {
   } catch { return null; }
 }
 
-let pars = [...DEFAULT_PARS];
+function loadCachedLive() {
+  try {
+    const value = JSON.parse(localStorage.getItem(LIVE_CACHE_KEY) || "null");
+    const savedMatch = value?.match && TEAM_COLOR_PALETTE[value.match.teamAColor] && TEAM_COLOR_PALETTE[value.match.teamBColor]
+      ? { ...DEFAULT_MATCH, ...value.match }
+      : null;
+    if (!savedMatch || !Array.isArray(value.players) || value.players.length !== 8 || !Array.isArray(value.pars) || value.pars.length !== 18 || !Array.isArray(value.scores)) return null;
+    return { match: savedMatch, players: value.players, pars: value.pars.map(Number), scores: value.scores };
+  } catch { return null; }
+}
+
+function cacheLiveSnapshot() {
+  try {
+    const scores = players.flatMap((player) => player.scores.flatMap((strokes, hole) => strokes === null ? [] : [{ playerId: player.id, hole, strokes }]));
+    const playerSettings = players.map(({ id, name, team, flight: playerFlight }) => ({ id, name, team, flight: playerFlight }));
+    localStorage.setItem(LIVE_CACHE_KEY, JSON.stringify({ match, pars, players: playerSettings, scores }));
+  } catch { /* Live data remains available without device storage. */ }
+}
+
+const cachedLive = loadCachedLive();
+let pars = cachedLive ? [...cachedLive.pars] : [...DEFAULT_PARS];
 let draftPars = [...DEFAULT_PARS];
-let match = loadCachedMatch() || { ...DEFAULT_MATCH };
+let match = cachedLive?.match || loadCachedMatch() || { ...DEFAULT_MATCH };
 let draftMatch = { ...match };
-let players = buildPlayers(DEFAULT_PLAYER_DATA);
+let players = cachedLive ? buildPlayers(cachedLive.players, cachedLive.scores) : buildPlayers(DEFAULT_PLAYER_DATA);
 let draftPlayers = DEFAULT_PLAYER_DATA.map((player) => ({ ...player }));
 let flight = 1;
 let nine = "front";
@@ -144,7 +165,9 @@ function hydrateLive(data) {
   if (Array.isArray(data.pars) && data.pars.length === 18) pars = data.pars.map(Number);
   const settings = Array.isArray(data.players) && data.players.length === 8 ? data.players : DEFAULT_PLAYER_DATA;
   players = buildPlayers(settings, data.scores || []);
+  cacheLiveSnapshot();
   document.documentElement.classList.remove("theme-pending");
+  document.documentElement.classList.remove("live-pending");
   render();
 }
 
@@ -368,13 +391,14 @@ byId("password-button").addEventListener("click", () => {
 
 byId("password-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const currentPassword = String(form.get("currentPassword") || "");
   const newPassword = String(form.get("newPassword") || "");
   if (newPassword !== String(form.get("confirmPassword") || "")) return showToast("New passwords do not match");
   try {
     await api("/api/auth/password", { method: "PUT", headers: headers(true), body: JSON.stringify({ currentPassword, newPassword }) });
-    event.currentTarget.reset();
+    formElement.reset();
     byId("password-backdrop").classList.add("hidden");
     showToast("Password changed successfully");
   } catch (error) {
@@ -392,12 +416,15 @@ byId("reset-button").addEventListener("click", () => {
 byId("reset-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!scorer) return;
-  const password = String(new FormData(event.currentTarget).get("password") || "");
+  const formElement = event.currentTarget;
+  const password = String(new FormData(formElement).get("password") || "");
   try {
     await api("/api/live/reset", { method: "POST", headers: headers(true), body: JSON.stringify({ password }) });
-    event.currentTarget.reset();
+    players = players.map((player) => ({ ...player, scores: Array(18).fill(null) }));
+    cacheLiveSnapshot();
+    formElement.reset();
     byId("reset-backdrop").classList.add("hidden");
-    await refreshLive(false);
+    render();
     showToast("Game reset. All scores were cleared.");
   } catch (error) {
     showToast(error.message);
@@ -406,14 +433,15 @@ byId("reset-form").addEventListener("submit", async (event) => {
 
 byId("login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   try {
     const data = await api("/api/auth/login", { method: "POST", headers: headers(true), body: JSON.stringify({ id: String(form.get("scorerId") || "").trim().toLowerCase(), password: String(form.get("password") || "") }) });
     scorer = data.scorer;
     token = data.token;
     localStorage.setItem(TOKEN_KEY, token);
     flight = scorer.flight;
-    event.currentTarget.reset();
+    formElement.reset();
     byId("auth-backdrop").classList.add("hidden");
     render();
     showToast(`${scorer.label} signed in`);
@@ -426,13 +454,26 @@ byId("score-minus").addEventListener("click", () => { draftScore = draftScore ==
 byId("score-plus").addEventListener("click", () => { draftScore = draftScore === null ? 1 : Math.min(12, draftScore + 1); updateScoreEditor(); });
 byId("save-score").addEventListener("click", async () => {
   if (!editing || !scorer) return;
+  const savedEditing = { ...editing };
+  const savedScore = draftScore;
+  const previousPlayers = players.map((player) => ({ ...player, scores: [...player.scores] }));
+  players = players.map((player) => {
+    if (player.id !== savedEditing.playerId) return player;
+    const scores = [...player.scores];
+    scores[savedEditing.hole] = savedScore;
+    return { ...player, scores };
+  });
+  byId("score-backdrop").classList.add("hidden");
+  editing = null;
+  cacheLiveSnapshot();
+  render();
   try {
-    await api("/api/live/score", { method: "PATCH", headers: headers(true), body: JSON.stringify({ playerId: editing.playerId, hole: editing.hole, strokes: draftScore }) });
-    byId("score-backdrop").classList.add("hidden");
-    editing = null;
-    await refreshLive(false);
-    showToast(draftScore === null ? "Score cleared and synced" : "Score saved and synced");
+    await api("/api/live/score", { method: "PATCH", headers: headers(true), body: JSON.stringify({ playerId: savedEditing.playerId, hole: savedEditing.hole, strokes: savedScore }) });
+    showToast(savedScore === null ? "Score cleared and synced" : "Score saved and synced");
   } catch (error) {
+    players = previousPlayers;
+    cacheLiveSnapshot();
+    render();
     showToast(error.message);
   }
 });
@@ -537,8 +578,9 @@ byId("share-button").addEventListener("click", async () => {
 
 async function start() {
   render();
+  if (cachedLive) document.documentElement.classList.remove("live-pending");
   try { await Promise.all([restoreSession(), refreshLive(true)]); }
-  finally { document.documentElement.classList.remove("theme-pending"); render(); }
+  finally { document.documentElement.classList.remove("theme-pending", "live-pending"); render(); }
   setInterval(() => refreshLive(true), 10000);
 }
 
