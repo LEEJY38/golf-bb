@@ -1,5 +1,17 @@
 const API_BASE = "https://golf-8-live-score.sd897v7sxf.chatgpt.site";
 const DEFAULT_PARS = [4, 5, 3, 4, 4, 5, 3, 4, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4];
+const DEFAULT_MATCH = { eventDate: "2026-08-21", venue: "Horizon Hills Golf Club", teamAName: "Jahat", teamBName: "Baik", teamAColor: "green", teamBColor: "gold" };
+const TEAM_COLOR_PALETTE = {
+  green: { background: "#173d2c", text: "#ffffff" },
+  gold: { background: "#d9a65d", text: "#273127" },
+  red: { background: "#b83b45", text: "#ffffff" },
+  black: { background: "#171918", text: "#ffffff" },
+  blue: { background: "#2d5fa8", text: "#ffffff" },
+  gray: { background: "#737a7d", text: "#ffffff" },
+  white: { background: "#f4f4f0", text: "#273127" },
+  purple: { background: "#7050a5", text: "#ffffff" },
+  pink: { background: "#d979a2", text: "#311d27" },
+};
 const DEFAULT_PLAYER_DATA = [
   { id: 1, name: "HM", team: "B", flight: 1 },
   { id: 2, name: "JY", team: "B", flight: 1 },
@@ -13,6 +25,8 @@ const DEFAULT_PLAYER_DATA = [
 
 let pars = [...DEFAULT_PARS];
 let draftPars = [...DEFAULT_PARS];
+let match = { ...DEFAULT_MATCH };
+let draftMatch = { ...DEFAULT_MATCH };
 let players = buildPlayers(DEFAULT_PLAYER_DATA);
 let draftPlayers = DEFAULT_PLAYER_DATA.map((player) => ({ ...player }));
 let flight = 1;
@@ -21,6 +35,9 @@ let scorer = null;
 let token = sessionStorage.getItem("golfbb_token") || "";
 let editing = null;
 let draftScore = null;
+let swapSourceId = null;
+let swapTeam = "A";
+let swapPlayerId = null;
 let toastTimer = null;
 
 const byId = (id) => document.getElementById(id);
@@ -32,6 +49,15 @@ function escapeHtml(value) {
 function initials(name) {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
   return (parts.length > 1 ? parts.slice(0, 2).map((part) => part[0]).join("") : (parts[0] || "?").slice(0, 2)).toUpperCase();
+}
+
+function teamName(team) {
+  return team === "A" ? match.teamAName : match.teamBName;
+}
+
+function formatEventDate(value) {
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(date);
 }
 
 function buildPlayers(settings, scores = []) {
@@ -83,6 +109,7 @@ function showToast(message) {
 }
 
 function hydrateLive(data) {
+  if (data.match && typeof data.match === "object") match = { ...DEFAULT_MATCH, ...data.match };
   if (Array.isArray(data.pars) && data.pars.length === 18) pars = data.pars.map(Number);
   const settings = Array.isArray(data.players) && data.players.length === 8 ? data.players : DEFAULT_PLAYER_DATA;
   players = buildPlayers(settings, data.scores || []);
@@ -100,7 +127,7 @@ async function refreshLive(silent = true) {
 function renderGroups() {
   for (const group of [1, 2]) {
     byId(`group-${group}`).innerHTML = players.filter((player) => player.flight === group).map((player) => `
-      <div><span class="mini-avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><p><strong>${escapeHtml(player.name)}</strong><small>Team ${player.team === "A" ? "Jahat" : "Baik"}</small></p></div>
+      <button class="roster-player" type="button" data-swap-source="${player.id}" ${scorer ? "" : "disabled"}><span class="mini-avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="roster-player-copy"><strong>${escapeHtml(player.name)}</strong><small>Team ${escapeHtml(teamName(player.team))}</small></span>${scorer ? '<span class="swap-glyph">↔</span>' : ""}</button>
     `).join("");
   }
 }
@@ -119,6 +146,25 @@ function renderTeamTotals() {
   byId("team-b-card").classList.toggle("leading", leader === "B");
 }
 
+function renderMatchMeta() {
+  const teamAColor = TEAM_COLOR_PALETTE[match.teamAColor] || TEAM_COLOR_PALETTE.green;
+  const teamBColor = TEAM_COLOR_PALETTE[match.teamBColor] || TEAM_COLOR_PALETTE.gold;
+  document.documentElement.style.setProperty("--team-a-color", teamAColor.background);
+  document.documentElement.style.setProperty("--team-a-text", teamAColor.text);
+  document.documentElement.style.setProperty("--team-b-color", teamBColor.background);
+  document.documentElement.style.setProperty("--team-b-text", teamBColor.text);
+  byId("team-headline-a").textContent = match.teamAName;
+  byId("team-headline-b").textContent = match.teamBName;
+  byId("event-meta").textContent = `${formatEventDate(match.eventDate)} · ${match.venue}`;
+  byId("team-a-initial").textContent = match.teamAName.slice(0, 1).toUpperCase();
+  byId("team-b-initial").textContent = match.teamBName.slice(0, 1).toUpperCase();
+  byId("team-a-name").textContent = match.teamAName.toUpperCase();
+  byId("team-b-name").textContent = match.teamBName.toUpperCase();
+  byId("flight-teams").textContent = `2 Team ${match.teamAName} · 2 Team ${match.teamBName}`;
+  const description = `Golf BB · Team ${match.teamAName} vs Team ${match.teamBName} live golf score`;
+  document.querySelector('meta[name="description"]')?.setAttribute("content", description);
+}
+
 function renderScoreboard() {
   const activeHole = currentHole();
   const holes = nine === "front" ? Array.from({ length: 9 }, (_, index) => index) : Array.from({ length: 9 }, (_, index) => index + 9);
@@ -130,7 +176,7 @@ function renderScoreboard() {
 
   for (const player of visiblePlayers) {
     const safeName = escapeHtml(player.name);
-    html += `<div class="score-row"><div class="player-cell"><span class="avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="player-name"><strong>${safeName}</strong><small>TEAM ${player.team === "A" ? "JAHAT" : "BAIK"}</small></span></div>`;
+    html += `<div class="score-row"><div class="player-cell"><span class="avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="player-name"><strong>${safeName}</strong><small>TEAM ${escapeHtml(teamName(player.team).toUpperCase())}</small></span></div>`;
     html += holes.map((hole) => {
       const score = player.scores[hole];
       const diff = score === null ? 0 : score - pars[hole];
@@ -153,6 +199,9 @@ function render() {
   byId("login-button").textContent = scorer ? "Sign Out" : "Scorer Sign In";
   byId("par-button").classList.toggle("hidden", !scorer);
   byId("match-button").classList.toggle("hidden", !scorer);
+  byId("password-button").classList.toggle("hidden", !scorer);
+  byId("quick-edit-hint").classList.toggle("hidden", !scorer);
+  renderMatchMeta();
   renderTeamTotals();
   renderScoreboard();
   renderGroups();
@@ -171,7 +220,7 @@ function openScoreEditor(playerId, hole) {
   }
   editing = { playerId, hole };
   draftScore = player.scores[hole] ?? pars[hole];
-  byId("editor-player").innerHTML = `<span class="avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="player-name"><strong>${escapeHtml(player.name)}</strong><small>TEAM ${player.team === "A" ? "JAHAT" : "BAIK"}</small></span>`;
+  byId("editor-player").innerHTML = `<span class="avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="player-name"><strong>${escapeHtml(player.name)}</strong><small>TEAM ${escapeHtml(teamName(player.team).toUpperCase())}</small></span>`;
   byId("editor-hole").textContent = `HOLE ${hole + 1}`;
   byId("editor-par").textContent = `PAR ${pars[hole]}`;
   updateScoreEditor();
@@ -199,8 +248,42 @@ function renderMatchEditor() {
     flight1: draftPlayers.filter((player) => player.flight === 1).length,
     flight2: draftPlayers.filter((player) => player.flight === 2).length,
   };
-  byId("match-summary").innerHTML = `<span>JAHAT <strong>${counts.teamA}/4</strong></span><span>BAIK <strong>${counts.teamB}/4</strong></span><span>FLIGHT 1 <strong>${counts.flight1}/4</strong></span><span>FLIGHT 2 <strong>${counts.flight2}/4</strong></span>`;
-  byId("player-settings-list").innerHTML = draftPlayers.map((player) => `<div class="player-setting-row"><span class="player-slot">${String(player.id).padStart(2, "0")}</span><label>PLAYER NAME<input value="${escapeHtml(player.name)}" maxlength="30" data-player-name="${player.id}" aria-label="Player ${player.id} name" /></label><label>TEAM<select data-player-team="${player.id}" aria-label="Player ${player.id} team"><option value="A" ${player.team === "A" ? "selected" : ""}>Jahat</option><option value="B" ${player.team === "B" ? "selected" : ""}>Baik</option></select></label><label>FLIGHT<select data-player-flight="${player.id}" aria-label="Player ${player.id} flight"><option value="1" ${player.flight === 1 ? "selected" : ""}>1</option><option value="2" ${player.flight === 2 ? "selected" : ""}>2</option></select></label></div>`).join("");
+  byId("match-date").value = draftMatch.eventDate;
+  byId("match-venue").value = draftMatch.venue;
+  byId("match-team-a").value = draftMatch.teamAName;
+  byId("match-team-b").value = draftMatch.teamBName;
+  byId("match-team-a-color").value = draftMatch.teamAColor;
+  byId("match-team-b-color").value = draftMatch.teamBColor;
+  byId("match-team-a-swatch").style.background = (TEAM_COLOR_PALETTE[draftMatch.teamAColor] || TEAM_COLOR_PALETTE.green).background;
+  byId("match-team-b-swatch").style.background = (TEAM_COLOR_PALETTE[draftMatch.teamBColor] || TEAM_COLOR_PALETTE.gold).background;
+  byId("match-summary").innerHTML = `<span>${escapeHtml(draftMatch.teamAName || "TEAM A")} <strong>${counts.teamA}/4</strong></span><span>${escapeHtml(draftMatch.teamBName || "TEAM B")} <strong>${counts.teamB}/4</strong></span><span>FLIGHT 1 <strong>${counts.flight1}/4</strong></span><span>FLIGHT 2 <strong>${counts.flight2}/4</strong></span>`;
+  byId("player-settings-list").innerHTML = draftPlayers.map((player) => `<div class="player-setting-row"><span class="player-slot">${String(player.id).padStart(2, "0")}</span><label>PLAYER NAME<input value="${escapeHtml(player.name)}" maxlength="30" data-player-name="${player.id}" aria-label="Player ${player.id} name" /></label><label>TEAM<select data-player-team="${player.id}" aria-label="Player ${player.id} team"><option value="A" ${player.team === "A" ? "selected" : ""}>${escapeHtml(draftMatch.teamAName || "Team A")}</option><option value="B" ${player.team === "B" ? "selected" : ""}>${escapeHtml(draftMatch.teamBName || "Team B")}</option></select></label><label>FLIGHT<select data-player-flight="${player.id}" aria-label="Player ${player.id} flight"><option value="1" ${player.flight === 1 ? "selected" : ""}>1</option><option value="2" ${player.flight === 2 ? "selected" : ""}>2</option></select></label></div>`).join("");
+}
+
+function renderSwapEditor() {
+  const source = players.find((player) => player.id === swapSourceId);
+  if (!source) return;
+  const candidates = players.filter((player) => player.id !== source.id && player.team === swapTeam && (player.team !== source.team || player.flight !== source.flight));
+  if (!candidates.some((player) => player.id === swapPlayerId)) swapPlayerId = candidates[0]?.id ?? null;
+  byId("swap-title").textContent = `Replace ${source.name}`;
+  byId("swap-current").innerHTML = `<span class="mini-avatar team-${source.team.toLowerCase()}">${escapeHtml(initials(source.name))}</span><span><small>CURRENT PLAYER</small><strong>${escapeHtml(source.name)}</strong><em>Team ${escapeHtml(teamName(source.team))} · Flight ${source.flight}</em></span>`;
+  byId("swap-team").innerHTML = `<option value="A">Team ${escapeHtml(match.teamAName)}</option><option value="B">Team ${escapeHtml(match.teamBName)}</option>`;
+  byId("swap-team").value = swapTeam;
+  byId("swap-player").innerHTML = candidates.map((player) => `<option value="${player.id}">${escapeHtml(player.name)} · Flight ${player.flight}</option>`).join("");
+  byId("swap-player").value = swapPlayerId ?? "";
+  byId("save-swap").disabled = !swapPlayerId;
+}
+
+function openPlayerSwap(playerId) {
+  if (!scorer) return showToast("Sign in as a scorer to change the flight lineup.");
+  const source = players.find((player) => player.id === playerId);
+  if (!source) return;
+  const candidates = players.filter((player) => player.id !== source.id && player.team === source.team && player.flight !== source.flight);
+  swapSourceId = source.id;
+  swapTeam = source.team;
+  swapPlayerId = (candidates.find((player) => player.flight !== source.flight) || candidates[0] || players.find((player) => player.id !== source.id))?.id ?? null;
+  renderSwapEditor();
+  byId("swap-backdrop").classList.remove("hidden");
 }
 
 async function restoreSession() {
@@ -221,6 +304,7 @@ document.addEventListener("click", (event) => {
   if (!target) return;
   if (target.dataset.flight) { flight = Number(target.dataset.flight); render(); return; }
   if (target.dataset.nine) { nine = target.dataset.nine; render(); return; }
+  if (target.dataset.swapSource) { openPlayerSwap(Number(target.dataset.swapSource)); return; }
   if (target.classList.contains("score-cell")) { openScoreEditor(Number(target.dataset.player), Number(target.dataset.hole)); return; }
   if (target.dataset.close) { byId(`${target.dataset.close}-backdrop`).classList.add("hidden"); }
 });
@@ -240,6 +324,29 @@ byId("login-button").addEventListener("click", () => {
   sessionStorage.removeItem("golfbb_token");
   render();
   showToast("Switched to guest view");
+});
+
+byId("password-button").addEventListener("click", () => {
+  if (!scorer) return;
+  byId("password-copy").textContent = `Update the password for ${scorer.label}. Use at least 8 characters.`;
+  byId("password-form").reset();
+  byId("password-backdrop").classList.remove("hidden");
+});
+
+byId("password-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const currentPassword = String(form.get("currentPassword") || "");
+  const newPassword = String(form.get("newPassword") || "");
+  if (newPassword !== String(form.get("confirmPassword") || "")) return showToast("New passwords do not match");
+  try {
+    await api("/api/auth/password", { method: "PUT", headers: headers(true), body: JSON.stringify({ currentPassword, newPassword }) });
+    event.currentTarget.reset();
+    byId("password-backdrop").classList.add("hidden");
+    showToast("Password changed successfully");
+  } catch (error) {
+    showToast(error.message);
+  }
 });
 
 byId("login-form").addEventListener("submit", async (event) => {
@@ -289,10 +396,25 @@ byId("save-pars").addEventListener("click", async () => {
 });
 
 byId("match-button").addEventListener("click", () => {
+  draftMatch = { ...match };
   draftPlayers = players.map(({ id, name, team, flight: playerFlight }) => ({ id, name, team, flight: playerFlight }));
   renderMatchEditor();
   byId("match-backdrop").classList.remove("hidden");
 });
+
+for (const [elementId, field] of [["match-date", "eventDate"], ["match-venue", "venue"], ["match-team-a", "teamAName"], ["match-team-b", "teamBName"]]) {
+  byId(elementId).addEventListener("input", (event) => {
+    draftMatch = { ...draftMatch, [field]: event.target.value };
+  });
+  if (field === "teamAName" || field === "teamBName") byId(elementId).addEventListener("change", renderMatchEditor);
+}
+
+for (const [elementId, field] of [["match-team-a-color", "teamAColor"], ["match-team-b-color", "teamBColor"]]) {
+  byId(elementId).addEventListener("change", (event) => {
+    draftMatch = { ...draftMatch, [field]: event.target.value };
+    renderMatchEditor();
+  });
+}
 
 byId("player-settings-list").addEventListener("input", (event) => {
   const id = Number(event.target.dataset.playerName);
@@ -309,10 +431,43 @@ byId("player-settings-list").addEventListener("change", (event) => {
 
 byId("save-match").addEventListener("click", async () => {
   try {
-    await api("/api/live/players", { method: "PUT", headers: headers(true), body: JSON.stringify({ players: draftPlayers }) });
+    await api("/api/live/settings", { method: "PUT", headers: headers(true), body: JSON.stringify({ match: draftMatch, players: draftPlayers }) });
     byId("match-backdrop").classList.add("hidden");
     await refreshLive(false);
-    showToast("Player names, teams, and flights saved");
+    showToast("Match details and player setup saved");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+byId("swap-team").addEventListener("change", (event) => {
+  swapTeam = event.target.value;
+  const source = players.find((player) => player.id === swapSourceId);
+  const candidates = players.filter((player) => player.id !== source?.id && player.team === swapTeam && (!source || player.team !== source.team || player.flight !== source.flight));
+  swapPlayerId = (candidates.find((player) => player.flight !== source?.flight) || candidates[0])?.id ?? null;
+  renderSwapEditor();
+});
+
+byId("swap-player").addEventListener("change", (event) => {
+  swapPlayerId = Number(event.target.value);
+});
+
+byId("save-swap").addEventListener("click", async () => {
+  const source = players.find((player) => player.id === swapSourceId);
+  const replacement = players.find((player) => player.id === swapPlayerId);
+  if (!source || !replacement) return showToast("Choose a replacement player");
+  const nextPlayers = players.map(({ id, name, team, flight: playerFlight }) => {
+    if (id === source.id) return { id, name, team: replacement.team, flight: replacement.flight };
+    if (id === replacement.id) return { id, name, team: source.team, flight: source.flight };
+    return { id, name, team, flight: playerFlight };
+  });
+  try {
+    await api("/api/live/settings", { method: "PUT", headers: headers(true), body: JSON.stringify({ match, players: nextPlayers }) });
+    byId("swap-backdrop").classList.add("hidden");
+    swapSourceId = null;
+    swapPlayerId = null;
+    await refreshLive(false);
+    showToast(`${replacement.name} moved into Flight ${source.flight}`);
   } catch (error) {
     showToast(error.message);
   }
