@@ -23,10 +23,20 @@ const DEFAULT_PLAYER_DATA = [
   { id: 8, name: "KC", team: "B", flight: 2 },
 ];
 
+const MATCH_CACHE_KEY = "golfbb_match";
+
+function loadCachedMatch() {
+  try {
+    const value = JSON.parse(localStorage.getItem(MATCH_CACHE_KEY) || "null");
+    if (!value || !TEAM_COLOR_PALETTE[value.teamAColor] || !TEAM_COLOR_PALETTE[value.teamBColor]) return null;
+    return { ...DEFAULT_MATCH, ...value };
+  } catch { return null; }
+}
+
 let pars = [...DEFAULT_PARS];
 let draftPars = [...DEFAULT_PARS];
-let match = { ...DEFAULT_MATCH };
-let draftMatch = { ...DEFAULT_MATCH };
+let match = loadCachedMatch() || { ...DEFAULT_MATCH };
+let draftMatch = { ...match };
 let players = buildPlayers(DEFAULT_PLAYER_DATA);
 let draftPlayers = DEFAULT_PLAYER_DATA.map((player) => ({ ...player }));
 let flight = 1;
@@ -83,6 +93,17 @@ function formatToPar(value) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+function scoreMarkerClass(score, par) {
+  if (score === null) return "";
+  if (score < par) return "under";
+  if (score >= par * 2) return "double-par";
+  const difference = score - par;
+  if (difference === 1) return "bogey";
+  if (difference === 2) return "double-bogey";
+  if (difference >= 3) return "triple-bogey";
+  return "";
+}
+
 function currentHole() {
   return Math.max(0, ...players.map((player) => player.scores.reduce((last, score, index) => score === null ? last : index + 1, 0)));
 }
@@ -116,10 +137,14 @@ function showToast(message) {
 }
 
 function hydrateLive(data) {
-  if (data.match && typeof data.match === "object") match = { ...DEFAULT_MATCH, ...data.match };
+  if (data.match && typeof data.match === "object") {
+    match = { ...DEFAULT_MATCH, ...data.match };
+    try { localStorage.setItem(MATCH_CACHE_KEY, JSON.stringify(match)); } catch { /* Live data remains available without device storage. */ }
+  }
   if (Array.isArray(data.pars) && data.pars.length === 18) pars = data.pars.map(Number);
   const settings = Array.isArray(data.players) && data.players.length === 8 ? data.players : DEFAULT_PLAYER_DATA;
   players = buildPlayers(settings, data.scores || []);
+  document.documentElement.classList.remove("theme-pending");
   render();
 }
 
@@ -186,9 +211,8 @@ function renderScoreboard() {
     html += `<div class="score-row"><div class="player-cell"><span class="avatar team-${player.team.toLowerCase()}">${escapeHtml(initials(player.name))}</span><span class="player-name"><strong>${safeName}</strong><small>TEAM ${escapeHtml(teamName(player.team).toUpperCase())}</small></span></div>`;
     html += holes.map((hole) => {
       const score = player.scores[hole];
-      const diff = score === null ? 0 : score - pars[hole];
       const label = score === null ? "not entered" : `${score} strokes`;
-      return `<button class="score-cell ${hole + 1 === activeHole ? "current" : ""} ${diff < 0 ? "under" : ""} ${diff > 0 ? "over" : ""}" data-player="${player.id}" data-hole="${hole}" aria-label="${safeName}, hole ${hole + 1}, ${label}" ${canEditFlight ? "" : "data-readonly=\"true\""}><span>${score ?? "–"}</span></button>`;
+      return `<button class="score-cell ${hole + 1 === activeHole ? "current" : ""} ${scoreMarkerClass(score, pars[hole])}" data-player="${player.id}" data-hole="${hole}" aria-label="${safeName}, hole ${hole + 1}, ${label}" ${canEditFlight ? "" : "data-readonly=\"true\""}><span>${score ?? "–"}</span></button>`;
     }).join("");
     html += `<div class="total-cell"><strong>${scoreTotal(player.scores)}</strong><small>${formatToPar(toPar(player))}</small></div></div>`;
   }
@@ -207,6 +231,7 @@ function render() {
   byId("par-button").classList.toggle("hidden", !scorer);
   byId("match-button").classList.toggle("hidden", !scorer);
   byId("password-button").classList.toggle("hidden", !scorer);
+  byId("reset-button").classList.toggle("hidden", !scorer);
   byId("quick-edit-hint").classList.toggle("hidden", !scorer);
   renderMatchMeta();
   renderTeamTotals();
@@ -237,8 +262,9 @@ function openScoreEditor(playerId, hole) {
 function updateScoreEditor() {
   if (!editing) return;
   const par = pars[editing.hole];
-  byId("draft-score").textContent = draftScore;
-  byId("score-description").textContent = draftScore < par ? "UNDER PAR" : draftScore === par ? "EVEN PAR" : "OVER PAR";
+  byId("draft-score").textContent = draftScore ?? "–";
+  byId("score-description").textContent = draftScore === null ? "NOT ENTERED" : draftScore < par ? "UNDER PAR" : draftScore === par ? "EVEN PAR" : "OVER PAR";
+  byId("save-score").innerHTML = `${draftScore === null ? "CLEAR SCORE" : "SAVE SCORE"} <span>✓</span>`;
 }
 
 function renderParEditor() {
@@ -356,6 +382,28 @@ byId("password-form").addEventListener("submit", async (event) => {
   }
 });
 
+byId("reset-button").addEventListener("click", () => {
+  if (!scorer) return;
+  byId("reset-password-label").firstChild.textContent = `CONFIRM ${scorer.id.toUpperCase()} PASSWORD`;
+  byId("reset-form").reset();
+  byId("reset-backdrop").classList.remove("hidden");
+});
+
+byId("reset-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!scorer) return;
+  const password = String(new FormData(event.currentTarget).get("password") || "");
+  try {
+    await api("/api/live/reset", { method: "POST", headers: headers(true), body: JSON.stringify({ password }) });
+    event.currentTarget.reset();
+    byId("reset-backdrop").classList.add("hidden");
+    await refreshLive(false);
+    showToast("Game reset. All scores were cleared.");
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
 byId("login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -374,8 +422,8 @@ byId("login-form").addEventListener("submit", async (event) => {
   }
 });
 
-byId("score-minus").addEventListener("click", () => { draftScore = Math.max(1, draftScore - 1); updateScoreEditor(); });
-byId("score-plus").addEventListener("click", () => { draftScore = Math.min(12, draftScore + 1); updateScoreEditor(); });
+byId("score-minus").addEventListener("click", () => { draftScore = draftScore === null || draftScore <= 1 ? null : draftScore - 1; updateScoreEditor(); });
+byId("score-plus").addEventListener("click", () => { draftScore = draftScore === null ? 1 : Math.min(12, draftScore + 1); updateScoreEditor(); });
 byId("save-score").addEventListener("click", async () => {
   if (!editing || !scorer) return;
   try {
@@ -383,7 +431,7 @@ byId("save-score").addEventListener("click", async () => {
     byId("score-backdrop").classList.add("hidden");
     editing = null;
     await refreshLive(false);
-    showToast("Score saved and synced");
+    showToast(draftScore === null ? "Score cleared and synced" : "Score saved and synced");
   } catch (error) {
     showToast(error.message);
   }
@@ -488,8 +536,9 @@ byId("share-button").addEventListener("click", async () => {
 });
 
 async function start() {
-  await Promise.all([restoreSession(), refreshLive(true)]);
   render();
+  try { await Promise.all([restoreSession(), refreshLive(true)]); }
+  finally { document.documentElement.classList.remove("theme-pending"); render(); }
   setInterval(() => refreshLive(true), 10000);
 }
 

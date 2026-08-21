@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="theme-pending">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,6 +8,27 @@
     <meta property="og:description" content="Live scores, player flights, and match settings for an 8-player golf event" />
     <meta property="og:image" content="https://leejy38.github.io/golf-bb/event-cover.jpeg" />
     <title>Golf BB · Live Score</title>
+    <script>
+      (() => {
+        const palette = {
+          green: ["#173d2c", "#ffffff"], gold: ["#d9a65d", "#273127"], red: ["#b83b45", "#ffffff"],
+          black: ["#171918", "#ffffff"], blue: ["#2d5fa8", "#ffffff"], gray: ["#737a7d", "#ffffff"],
+          white: ["#f4f4f0", "#273127"], purple: ["#7050a5", "#ffffff"], pink: ["#d979a2", "#311d27"],
+        };
+        try {
+          const match = JSON.parse(localStorage.getItem("golfbb_match") || "null");
+          const teamA = palette[match?.teamAColor];
+          const teamB = palette[match?.teamBColor];
+          if (!teamA || !teamB) return;
+          const root = document.documentElement;
+          root.style.setProperty("--team-a-color", teamA[0]);
+          root.style.setProperty("--team-a-text", teamA[1]);
+          root.style.setProperty("--team-b-color", teamB[0]);
+          root.style.setProperty("--team-b-text", teamB[1]);
+          root.classList.remove("theme-pending");
+        } catch { /* The live settings request will provide the current colors. */ }
+      })();
+    </script>
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
   </head>
@@ -33,14 +54,14 @@
         </section>
 
         <section class="scoreboard" id="scoreboard">
-          <div class="section-head"><div><p class="section-kicker">LIVE SCORECARD</p><h2>Live Score</h2></div><div class="section-actions"><p>AUTO REFRESH <span>●</span></p><button class="par-settings-button hidden" id="par-button">Course PAR</button><button class="par-settings-button hidden" id="match-button">Match Settings</button><button class="par-settings-button hidden" id="password-button">Change Password</button></div></div>
+          <div class="section-head"><div><p class="section-kicker">LIVE SCORECARD</p><h2>Live Score</h2></div><div class="section-actions"><p>AUTO REFRESH <span>●</span></p><button class="par-settings-button hidden" id="par-button">Course PAR</button><button class="par-settings-button hidden" id="match-button">Match Settings</button><button class="par-settings-button hidden" id="password-button">Change Password</button><button class="par-settings-button danger-settings-button hidden" id="reset-button">Reset Game</button></div></div>
           <div class="toolbar">
             <div class="segmented" aria-label="Select flight"><button class="active" data-flight="1">Flight 1</button><button data-flight="2">Flight 2</button></div>
             <div class="segmented light" aria-label="Select nine holes"><button class="active" data-nine="front">Front 9</button><button data-nine="back">Back 9</button></div>
           </div>
           <div class="flight-note"><span>⛳</span><p><strong id="flight-title">Flight 1 · Tee 08:10</strong><small id="flight-teams">2 Team Jahat · 2 Team Baik</small></p></div>
           <div class="score-scroll"><div class="score-grid" id="score-grid" style="--hole-count:9"></div></div>
-          <div class="score-legend"><span><i class="birdie"></i>UNDER PAR</span><span><i class="bogey"></i>OVER PAR</span><span>← SWIPE TO VIEW →</span></div>
+          <div class="score-legend"><span><i class="birdie"></i>UNDER PAR</span><span><i class="bogey"></i>BOGEY</span><span><i class="double-bogey"></i>DOUBLE BOGEY</span><span><i class="triple-bogey"></i>TRIPLE BOGEY</span><span><i class="double-par">DP</i>DOUBLE PAR</span><span class="swipe-hint">← SWIPE TO VIEW →</span></div>
         </section>
 
         <section class="groups-section" id="groups">
@@ -67,7 +88,9 @@
 
       <div class="modal-backdrop hidden" id="password-backdrop" role="presentation"><div class="auth-modal password-modal" role="dialog" aria-modal="true" aria-label="Change password"><button class="modal-close" data-close="password" aria-label="Close">×</button><p class="section-kicker">ACCOUNT SECURITY</p><h2>Change Password</h2><p class="modal-copy" id="password-copy">Update your scorer password. Use at least 8 characters.</p><form id="password-form"><label>CURRENT PASSWORD<input required name="currentPassword" type="password" autocomplete="current-password" /></label><label>NEW PASSWORD<input required minlength="8" maxlength="72" name="newPassword" type="password" autocomplete="new-password" /></label><label>CONFIRM NEW PASSWORD<input required minlength="8" maxlength="72" name="confirmPassword" type="password" autocomplete="new-password" /></label><button class="primary-button" type="submit">UPDATE PASSWORD <span>✓</span></button></form></div></div>
 
-      <div class="modal-backdrop align-bottom hidden" id="score-backdrop" role="presentation"><div class="score-editor" role="dialog" aria-modal="true" aria-label="Edit score"><div class="sheet-handle"></div><div class="editor-heading"><div class="player-cell" id="editor-player"></div><button data-close="score" aria-label="Close">×</button></div><div class="hole-label"><span id="editor-hole"></span><small id="editor-par"></small></div><div class="stepper"><button id="score-minus" aria-label="Subtract one stroke">−</button><strong id="draft-score">4</strong><button id="score-plus" aria-label="Add one stroke">＋</button></div><p class="score-description" id="score-description"></p><button class="primary-button" id="save-score">SAVE SCORE <span>✓</span></button></div></div>
+      <div class="modal-backdrop hidden" id="reset-backdrop" role="presentation"><div class="auth-modal reset-modal" role="dialog" aria-modal="true" aria-label="Reset game"><button class="modal-close" data-close="reset" aria-label="Close">×</button><p class="section-kicker danger-copy">DANGER ZONE</p><h2>Reset Game</h2><p class="modal-copy">This clears every recorded score for both flights. Match settings, players, teams, colors, venue, date, and PAR will stay unchanged.</p><form id="reset-form"><label id="reset-password-label">CONFIRM SCORER PASSWORD<input required name="password" type="password" autocomplete="current-password" /></label><button class="primary-button danger-button" type="submit">RESET ALL SCORES <span>!</span></button></form></div></div>
+
+      <div class="modal-backdrop align-bottom hidden" id="score-backdrop" role="presentation"><div class="score-editor" role="dialog" aria-modal="true" aria-label="Edit score"><div class="sheet-handle"></div><div class="editor-heading"><div class="player-cell" id="editor-player"></div><button data-close="score" aria-label="Close">×</button></div><div class="hole-label"><span id="editor-hole"></span><small id="editor-par"></small></div><div class="stepper"><button id="score-minus" aria-label="Subtract one stroke or clear score">−</button><strong id="draft-score">–</strong><button id="score-plus" aria-label="Add one stroke">＋</button></div><p class="score-description" id="score-description"></p><button class="primary-button" id="save-score">SAVE SCORE <span>✓</span></button></div></div>
 
       <div class="toast hidden" id="toast" role="status"></div>
     </main>
