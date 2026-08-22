@@ -682,6 +682,18 @@ async function start() {
   try { await Promise.all([restoreSession(), refreshLive(true)]); }
   finally { document.documentElement.classList.remove("theme-pending", "live-pending"); render(); }
   setInterval(() => refreshLive(true), 10000);
+  let lastWakeRefreshAt = Date.now();
+  const refreshWhenActive = () => {
+    if (document.visibilityState !== "visible") return;
+    const now = Date.now();
+    if (now - lastWakeRefreshAt < 1000) return;
+    lastWakeRefreshAt = now;
+    void refreshLive(true);
+  };
+  document.addEventListener("visibilitychange", refreshWhenActive);
+  window.addEventListener("pageshow", refreshWhenActive);
+  window.addEventListener("focus", refreshWhenActive);
+  window.addEventListener("online", refreshWhenActive);
 }
 
 start();
