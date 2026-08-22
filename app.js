@@ -1,6 +1,6 @@
 const API_BASE = "https://golf-8-live-score.sd897v7sxf.chatgpt.site";
 const DEFAULT_PARS = [4, 5, 3, 4, 4, 5, 3, 4, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4];
-const DEFAULT_MATCH = { eventDate: "2026-08-21", venue: "Horizon Hills Golf Club", teamAName: "Jahat", teamBName: "Baik", teamAColor: "green", teamBColor: "gold" };
+const DEFAULT_MATCH = { eventDate: "2026-08-21", venue: "Horizon Hills Golf Club", teamAName: "Jahat", teamBName: "Baik", teamAColor: "green", teamBColor: "gold", cardEnabled: true, cardValue: 20 };
 const TEAM_COLOR_PALETTE = {
   green: { background: "#173d2c", text: "#ffffff" },
   gold: { background: "#d9a65d", text: "#273127" },
@@ -41,7 +41,7 @@ function loadCachedLive() {
       ? { ...DEFAULT_MATCH, ...value.match }
       : null;
     if (!savedMatch || !Array.isArray(value.players) || value.players.length !== 8 || !Array.isArray(value.pars) || value.pars.length !== 18 || !Array.isArray(value.scores)) return null;
-    return { match: savedMatch, players: value.players, pars: value.pars.map(Number), scores: value.scores };
+    return { match: savedMatch, players: value.players, pars: value.pars.map(Number), scores: value.scores, ups: Array.isArray(value.ups) ? value.ups : [] };
   } catch { return null; }
 }
 
@@ -49,7 +49,7 @@ function cacheLiveSnapshot() {
   try {
     const scores = players.flatMap((player) => player.scores.flatMap((strokes, hole) => strokes === null ? [] : [{ playerId: player.id, hole, strokes }]));
     const playerSettings = players.map(({ id, name, team, flight: playerFlight }) => ({ id, name, team, flight: playerFlight }));
-    localStorage.setItem(LIVE_CACHE_KEY, JSON.stringify({ match, pars, players: playerSettings, scores }));
+    localStorage.setItem(LIVE_CACHE_KEY, JSON.stringify({ match, pars, players: playerSettings, scores, ups: upsToRows(ups) }));
   } catch { /* Live data remains available without device storage. */ }
 }
 
@@ -59,6 +59,7 @@ let draftPars = [...DEFAULT_PARS];
 let match = cachedLive?.match || loadCachedMatch() || { ...DEFAULT_MATCH };
 let draftMatch = { ...match };
 let players = cachedLive ? buildPlayers(cachedLive.players, cachedLive.scores) : buildPlayers(DEFAULT_PLAYER_DATA);
+let ups = upsFromRows(cachedLive?.ups || []);
 let draftPlayers = DEFAULT_PLAYER_DATA.map((player) => ({ ...player }));
 let flight = 1;
 let nine = "front";
@@ -67,6 +68,8 @@ const TOKEN_KEY = "golfbb_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let editing = null;
 let draftScore = null;
+let editingUp = null;
+let draftUp = 0;
 let swapSourceId = null;
 let swapTeam = "A";
 let swapPlayerId = null;
@@ -101,6 +104,20 @@ function buildPlayers(settings, scores = []) {
   return result;
 }
 
+function emptyUps() {
+  return { 1: Array(18).fill(0), 2: Array(18).fill(0) };
+}
+
+function upsFromRows(rows = []) {
+  const result = emptyUps();
+  for (const row of rows) if ((Number(row.flight) === 1 || Number(row.flight) === 2) && row.hole >= 0 && row.hole < 18 && (Number(row.upLevel) === 1 || Number(row.upLevel) === 2)) result[Number(row.flight)][Number(row.hole)] = Number(row.upLevel);
+  return result;
+}
+
+function upsToRows(values) {
+  return [1, 2].flatMap((playerFlight) => values[playerFlight].flatMap((upLevel, hole) => upLevel === 0 ? [] : [{ flight: playerFlight, hole, upLevel }]));
+}
+
 function scoreTotal(scores) {
   return scores.reduce((sum, score) => sum + (score ?? 0), 0);
 }
@@ -112,6 +129,23 @@ function toPar(player) {
 function formatToPar(value) {
   if (value === 0) return "E";
   return value > 0 ? `+${value}` : String(value);
+}
+
+function formatSigned(value) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function formatRm(value) {
+  return `${value < 0 ? "-" : value > 0 ? "+" : ""}RM${Math.abs(value).toLocaleString("en-MY", { maximumFractionDigits: 2 })}`;
+}
+
+function holeResult(hole) {
+  if (players.some((player) => player.scores[hole] === null)) return { complete: false, winner: null, cards: 0 };
+  const total = (team) => players.filter((player) => player.team === team).reduce((sum, player) => sum + Number(player.scores[hole]), 0);
+  const teamA = total("A");
+  const teamB = total("B");
+  const winner = teamA === teamB ? null : teamA < teamB ? "A" : "B";
+  return { complete: true, winner, cards: winner ? 2 + ups[1][hole] + ups[2][hole] : 0 };
 }
 
 function scoreMarkerClass(score, par) {
@@ -165,6 +199,7 @@ function hydrateLive(data) {
   if (Array.isArray(data.pars) && data.pars.length === 18) pars = data.pars.map(Number);
   const settings = Array.isArray(data.players) && data.players.length === 8 ? data.players : DEFAULT_PLAYER_DATA;
   players = buildPlayers(settings, data.scores || []);
+  ups = upsFromRows(data.ups || []);
   cacheLiveSnapshot();
   document.documentElement.classList.remove("theme-pending");
   document.documentElement.classList.remove("live-pending");
@@ -199,6 +234,16 @@ function renderTeamTotals() {
   byId("team-b-status").textContent = tied ? "TIED" : leader === "B" ? `LEADS BY ${leadBy}` : `TRAILS BY ${leadBy}`;
   byId("team-a-card").classList.toggle("leading", leader === "A");
   byId("team-b-card").classList.toggle("leading", leader === "B");
+  const netCardsA = Array.from({ length: 18 }, (_, hole) => holeResult(hole)).reduce((sum, result) => sum + (result.winner === "A" ? result.cards : result.winner === "B" ? -result.cards : 0), 0);
+  for (const [team, cards] of [["a", netCardsA], ["b", -netCardsA]]) {
+    const result = byId(`team-${team}-card-results`);
+    result.classList.toggle("hidden", !match.cardEnabled);
+    if (match.cardEnabled) {
+      const teamAmount = cards * match.cardValue;
+      result.innerHTML = `<span><small>CARDS</small><strong>${formatSigned(cards)}</strong></span><span><small>TEAM</small><strong>${formatRm(teamAmount)}</strong></span><span><small>EACH</small><strong>${formatRm(teamAmount / 4)}</strong></span>`;
+    }
+  }
+  byId("score-hero").classList.toggle("cards-enabled", match.cardEnabled);
 }
 
 function renderMatchMeta() {
@@ -215,7 +260,8 @@ function renderMatchMeta() {
   byId("team-b-initial").textContent = match.teamBName.slice(0, 1).toUpperCase();
   byId("team-a-name").textContent = match.teamAName.toUpperCase();
   byId("team-b-name").textContent = match.teamBName.toUpperCase();
-  byId("flight-teams").textContent = `2 Team ${match.teamAName} · 2 Team ${match.teamBName}`;
+  byId("flight-teams").textContent = `2 Team ${match.teamAName} · 2 Team ${match.teamBName}${match.cardEnabled ? " · Tap a hole to set Card Up" : ""}`;
+  byId("rules-copy").textContent = `18-hole stroke play. Each player records an individual score. The four player scores are combined for each hole, and the team with the lower hole total wins.${match.cardEnabled ? ` Each flight starts with 1 Card per hole and may add Up+1 or Up+2. One Card is RM${match.cardValue} per team.` : ""}`;
   const description = `Golf BB · Team ${match.teamAName} vs Team ${match.teamBName} live golf score`;
   document.querySelector('meta[name="description"]')?.setAttribute("content", description);
 }
@@ -226,7 +272,13 @@ function renderScoreboard() {
   const visiblePlayers = players.filter((player) => player.flight === flight);
   const canEditFlight = scorer?.flight === flight;
   let html = '<div class="grid-header player-column">PLAYER</div>';
-  html += holes.map((hole) => `<div class="grid-header ${hole + 1 === activeHole ? "current" : ""}"><b>${hole + 1}</b><small>PAR ${pars[hole]}</small></div>`).join("");
+  html += holes.map((hole) => {
+    const result = match.cardEnabled ? holeResult(hole) : { winner: null };
+    const upLevel = match.cardEnabled ? ups[flight][hole] : 0;
+    const winnerClass = result.winner ? `winner-${result.winner.toLowerCase()}` : "";
+    const editableClass = scorer?.flight === flight && match.cardEnabled ? "up-editable" : "";
+    return `<button type="button" class="grid-header hole-header ${hole + 1 === activeHole ? "current" : ""} ${winnerClass} ${editableClass}" data-up-hole="${hole}" aria-label="Hole ${hole + 1}, PAR ${pars[hole]}${upLevel ? `, Up plus ${upLevel}` : ""}${result.winner ? `, Team ${escapeHtml(teamName(result.winner))} won` : ""}" ${match.cardEnabled ? "" : "disabled"}>${upLevel ? `<em class="up-badge">UP ${upLevel}</em>` : ""}<b>${hole + 1}</b><small>PAR ${pars[hole]}</small></button>`;
+  }).join("");
   html += '<div class="grid-header total-column">TOTAL</div>';
 
   for (const player of visiblePlayers) {
@@ -310,6 +362,9 @@ function renderMatchEditor() {
   byId("match-team-b").value = draftMatch.teamBName;
   byId("match-team-a-color").value = draftMatch.teamAColor;
   byId("match-team-b-color").value = draftMatch.teamBColor;
+  byId("match-card-enabled").value = draftMatch.cardEnabled ? "on" : "off";
+  byId("match-card-value").value = draftMatch.cardValue;
+  byId("match-card-value").disabled = !draftMatch.cardEnabled;
   byId("match-team-a-swatch").style.background = (TEAM_COLOR_PALETTE[draftMatch.teamAColor] || TEAM_COLOR_PALETTE.green).background;
   byId("match-team-b-swatch").style.background = (TEAM_COLOR_PALETTE[draftMatch.teamBColor] || TEAM_COLOR_PALETTE.gold).background;
   byId("match-summary").innerHTML = `<span>${escapeHtml(draftMatch.teamAName || "TEAM A")} <strong>${counts.teamA}/4</strong></span><span>${escapeHtml(draftMatch.teamBName || "TEAM B")} <strong>${counts.teamB}/4</strong></span><span>FLIGHT 1 <strong>${counts.flight1}/4</strong></span><span>FLIGHT 2 <strong>${counts.flight2}/4</strong></span>`;
@@ -342,6 +397,18 @@ function openPlayerSwap(playerId) {
   byId("swap-backdrop").classList.remove("hidden");
 }
 
+function openUpEditor(hole) {
+  if (!match.cardEnabled) return;
+  if (!scorer) return showToast("Guest access is view-only. Sign in to change Card Up.");
+  if (scorer.flight !== flight) return showToast(`${scorer.label} can only edit Flight ${scorer.flight} Card Up.`);
+  editingUp = hole;
+  draftUp = ups[flight][hole];
+  byId("up-flight-label").textContent = `FLIGHT ${flight} · CARD GAME`;
+  byId("up-hole-label").textContent = `Hole ${hole + 1}`;
+  byId("up-options").querySelectorAll("[data-up-level]").forEach((button) => button.classList.toggle("active", Number(button.dataset.upLevel) === draftUp));
+  byId("up-backdrop").classList.remove("hidden");
+}
+
 async function restoreSession() {
   if (!token) return;
   try {
@@ -361,6 +428,8 @@ document.addEventListener("click", (event) => {
   if (target.dataset.flight) { flight = Number(target.dataset.flight); render(); return; }
   if (target.dataset.nine) { nine = target.dataset.nine; render(); return; }
   if (target.dataset.swapSource) { openPlayerSwap(Number(target.dataset.swapSource)); return; }
+  if (target.dataset.upHole) { openUpEditor(Number(target.dataset.upHole)); return; }
+  if (target.dataset.upLevel) { draftUp = Number(target.dataset.upLevel); byId("up-options").querySelectorAll("[data-up-level]").forEach((button) => button.classList.toggle("active", Number(button.dataset.upLevel) === draftUp)); return; }
   if (target.classList.contains("score-cell")) { openScoreEditor(Number(target.dataset.player), Number(target.dataset.hole)); return; }
   if (target.dataset.close) { byId(`${target.dataset.close}-backdrop`).classList.add("hidden"); }
 });
@@ -421,11 +490,12 @@ byId("reset-form").addEventListener("submit", async (event) => {
   try {
     await api("/api/live/reset", { method: "POST", headers: headers(true), body: JSON.stringify({ password }) });
     players = players.map((player) => ({ ...player, scores: Array(18).fill(null) }));
+    ups = emptyUps();
     cacheLiveSnapshot();
     formElement.reset();
     byId("reset-backdrop").classList.add("hidden");
     render();
-    showToast("Game reset. All scores were cleared.");
+    showToast("Game reset. All scores and Card Up records were cleared.");
   } catch (error) {
     showToast(error.message);
   }
@@ -511,6 +581,36 @@ for (const [elementId, field] of [["match-team-a-color", "teamAColor"], ["match-
     renderMatchEditor();
   });
 }
+
+byId("match-card-enabled").addEventListener("change", (event) => {
+  draftMatch = { ...draftMatch, cardEnabled: event.target.value === "on" };
+  renderMatchEditor();
+});
+
+byId("match-card-value").addEventListener("input", (event) => {
+  draftMatch = { ...draftMatch, cardValue: Math.max(1, Math.min(10000, Number(event.target.value) || 1)) };
+});
+
+byId("save-up").addEventListener("click", async () => {
+  if (editingUp === null || !scorer) return;
+  const hole = editingUp;
+  const playerFlight = scorer.flight;
+  const previousUps = { 1: [...ups[1]], 2: [...ups[2]] };
+  ups[playerFlight][hole] = draftUp;
+  editingUp = null;
+  byId("up-backdrop").classList.add("hidden");
+  cacheLiveSnapshot();
+  render();
+  try {
+    await api("/api/live/up", { method: "PATCH", headers: headers(true), body: JSON.stringify({ hole, upLevel: draftUp }) });
+    showToast(`Flight ${playerFlight} Hole ${hole + 1}: ${draftUp === 0 ? "Normal Card" : `Up+${draftUp}`}`);
+  } catch (error) {
+    ups = previousUps;
+    cacheLiveSnapshot();
+    render();
+    showToast(error.message);
+  }
+});
 
 byId("player-settings-list").addEventListener("input", (event) => {
   const id = Number(event.target.dataset.playerName);
