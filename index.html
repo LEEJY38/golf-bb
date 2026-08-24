@@ -8,6 +8,8 @@
     <meta property="og:description" content="Live scores, player flights, and match settings for an 8-player golf event" />
     <meta property="og:image" content="https://leejy38.github.io/golf-bb/event-cover.jpeg" />
     <title>Golf BB · Live Score</title>
+    <link rel="preconnect" href="https://golf-8-live-score.sd897v7sxf.chatgpt.site" crossorigin />
+    <link rel="dns-prefetch" href="https://golf-8-live-score.sd897v7sxf.chatgpt.site" />
     <script>
       (() => {
         const palette = {
@@ -16,7 +18,8 @@
           white: ["#f4f4f0", "#273127"], purple: ["#7050a5", "#ffffff"], pink: ["#d979a2", "#311d27"],
         };
         try {
-          const match = JSON.parse(localStorage.getItem("golfbb_match") || "null");
+          const live = JSON.parse(localStorage.getItem("golfbb_live") || "null");
+          const match = JSON.parse(localStorage.getItem("golfbb_match") || "null") || live?.match;
           const teamA = palette[match?.teamAColor];
           const teamB = palette[match?.teamBColor];
           if (!teamA || !teamB) return;
@@ -29,8 +32,8 @@
         } catch { /* The live settings request will provide the current colors. */ }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260822-resume1" />
-    <script src="app.js?v=20260822-resume1" defer></script>
+    <link rel="stylesheet" href="styles.css?v=20260824-instant1" />
+    <script src="app.js?v=20260824-instant1" defer></script>
   </head>
   <body>
     <main class="app-shell">
@@ -54,7 +57,7 @@
         </section>
 
         <section class="scoreboard" id="scoreboard">
-          <div class="section-head"><div><p class="section-kicker">LIVE SCORECARD</p><h2>Live Score</h2></div><div class="section-actions"><p>AUTO REFRESH <span>●</span></p><button class="par-settings-button hidden" id="par-button">Course PAR</button><button class="par-settings-button hidden" id="match-button">Match Settings</button><button class="par-settings-button hidden" id="password-button">Change Password</button><button class="par-settings-button danger-settings-button hidden" id="reset-button">Reset Game</button></div></div>
+          <div class="section-head"><div><p class="section-kicker">LIVE SCORECARD</p><h2>Live Score</h2></div><div class="section-actions"><p class="sync-status syncing" id="sync-status">SYNCING <span>●</span></p><button class="par-settings-button hidden" id="par-button">Course PAR</button><button class="par-settings-button hidden" id="match-button">Match Settings</button><button class="par-settings-button hidden" id="password-button">Change Password</button><button class="par-settings-button danger-settings-button hidden" id="reset-button">Reset Game</button></div></div>
           <div class="toolbar">
             <div class="segmented" aria-label="Select flight"><button class="active" data-flight="1">Flight 1</button><button data-flight="2">Flight 2</button></div>
             <div class="segmented light" aria-label="Select nine holes"><button class="active" data-nine="front">Front 9</button><button data-nine="back">Back 9</button></div>

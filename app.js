@@ -74,6 +74,7 @@ let swapSourceId = null;
 let swapTeam = "A";
 let swapPlayerId = null;
 let toastTimer = null;
+let syncStatusTimer = null;
 
 const byId = (id) => document.getElementById(id);
 
@@ -207,11 +208,23 @@ function hydrateLive(data) {
 }
 
 async function refreshLive(silent = true) {
+  clearTimeout(syncStatusTimer);
+  syncStatusTimer = setTimeout(() => setSyncStatus(true), 250);
   try {
     hydrateLive(await api("/api/live"));
   } catch (error) {
     if (!silent) showToast(error.message);
+  } finally {
+    clearTimeout(syncStatusTimer);
+    setSyncStatus(false);
   }
+}
+
+function setSyncStatus(syncing) {
+  const status = byId("sync-status");
+  if (!status) return;
+  status.classList.toggle("syncing", syncing);
+  status.innerHTML = `${syncing ? "SYNCING" : "AUTO REFRESH"} <span>●</span>`;
 }
 
 function renderGroups() {
@@ -678,7 +691,7 @@ byId("share-button").addEventListener("click", async () => {
 
 async function start() {
   render();
-  if (cachedLive) document.documentElement.classList.remove("live-pending");
+  if (cachedLive) { document.documentElement.classList.remove("live-pending"); setSyncStatus(false); }
   try { await Promise.all([restoreSession(), refreshLive(true)]); }
   finally { document.documentElement.classList.remove("theme-pending", "live-pending"); render(); }
   setInterval(() => refreshLive(true), 10000);
